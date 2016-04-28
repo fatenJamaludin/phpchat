@@ -249,6 +249,14 @@ textarea.textarea_msg{
     width: 400px;
     height: 120px;
     resize: none;
+    margin:10px auto;
+    padding: 15px;
+    background: #f7f9fd;
+    font-size: 15px;
+}
+input.gcm_token{
+    width: 400px;
+    resize: none;
     margin:20px auto;
     padding: 15px;
     background: #f7f9fd;

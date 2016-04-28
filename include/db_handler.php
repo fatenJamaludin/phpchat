@@ -132,9 +132,7 @@ class DbHandler {
         $stmt = $this->conn->prepare("INSERT INTO messages (chat_room_id, user_id, message) values(?, ?, ?)");
         $stmt->bind_param("iis", $chat_room_id, $user_id, $message);
 
-        $result = $stmt->execute();
-
-        if ($result) {
+        if ($result = $stmt->execute()) {
             $response['error'] = false;
 
             // get the message
@@ -153,7 +151,7 @@ class DbHandler {
             }
         } else {
             $response['error'] = true;
-            $response['message'] = 'Failed send message';
+            $response['message'] = 'Failed send message ' . $stmt->error;
         }
 
         return $response;

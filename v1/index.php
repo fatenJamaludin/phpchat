@@ -73,23 +73,6 @@ $app->get('/chat_rooms', function() {
 });
 
 /**
- * Adding user to a chat room so that he will start receving the push
- * notification whenever there is a new message in the chat room
- */
-$app->post('/chat_rooms/:id/join', function($chat_room_id) {
-    global $app;
-    $db = new DbHandler();
-
-    verifyRequiredParams(array('user_id'));
-
-    $user_id = $app->request->post('user_id');
-
-    $response = $db->joinChatRoom($chat_room_id, $user_id);
-
-    echoRespnse(200, $response);
-});
-
-/**
  * Messaging in a chat room
  * Will send push notification using Topic Messaging
  *  */
@@ -122,9 +105,8 @@ $app->post('/chat_rooms/:id/message', function($chat_room_id) {
         $push->setIsBackground(FALSE);
         $push->setFlag(PUSH_FLAG_CHATROOM);
         $push->setData($data);
-        
-        // echo json_encode($push->getPush());exit;
 
+        // echo json_encode($push->getPush());exit;
         // sending push message to a topic
         $gcm->sendToTopic('topic_' . $chat_room_id, $push->getPush());
 
@@ -149,32 +131,103 @@ $app->post('/users/:id/message', function($to_user_id) {
     $from_user_id = $app->request->post('user_id');
     $message = $app->request->post('message');
 
-    $response = $db->addMessage($from_user_id, $to_user_id, $message);
+    require_once __DIR__ . '/../libs/gcm/gcm.php';
+    require_once __DIR__ . '/../libs/gcm/push.php';
+    $gcm = new GCM();
+    $push = new Push();
 
-    if ($response['error'] == false) {
-        require_once __DIR__ . '/../libs/gcm/gcm.php';
-        require_once __DIR__ . '/../libs/gcm/push.php';
-        $gcm = new GCM();
-        $push = new Push();
+    $fromuser = $db->getUser($from_user_id);
+    $user = $db->getUser($to_user_id);
+    
+    $msg = array();
+    $msg['message'] = $message;
+    $msg['message_id'] = '';
+    $msg['chat_room_id'] = '';
+    $msg['created_at'] = date('Y-m-d G:i:s');
 
-        $user = $db->getUser($to_user_id);
+    $data = array();
+    $data['user'] = $fromuser;
+    $data['message'] = $msg;
+    $data['image'] = '';
 
-        $data = array();
-        $data['user'] = $user;
-        $data['message'] = $response['message'];
+    $push->setTitle("Google Cloud Messaging");
+    $push->setIsBackground(FALSE);
+    $push->setFlag(PUSH_FLAG_USER);
+    $push->setData($data);
+
+    // sending push message to single user
+    $gcm->send($user['gcm_registration_id'], $push->getPush());
+
+    $response['user'] = $user;
+    $response['error'] = false;
+
+
+    echoRespnse(200, $response);
+});
+
+$app->post('/users/push_test', function() {
+    global $app;
+
+    verifyRequiredParams(array('message', 'api_key', 'token'));
+
+    $message = $app->request->post('message');
+    $apiKey = $app->request->post('api_key');
+    $token = $app->request->post('token');
+    $image = $app->request->post('include_image');
+
+    $data = array();
+    $data['title'] = 'Google Cloud Messaging';
+    $data['message'] = $message;
+    if ($image == 'true') {
+        $data['image'] = 'http://api.androidhive.info/gcm/panda.jpg';
+    } else {
         $data['image'] = '';
-
-        $push->setTitle("Google Cloud Messaging");
-        $push->setIsBackground(FALSE);
-        $push->setFlag(PUSH_FLAG_USER);
-        $push->setData($data);
-
-        // sending push message to single user
-        $gcm->send($user['gcm_registration_id'], $push->getPush());
-
-        $response['user'] = $user;
-        $response['error'] = false;
     }
+    $data['created_at'] = date('Y-m-d G:i:s');
+
+    $fields = array(
+        'to' => $token,
+        'data' => $data,
+    );
+
+    // Set POST variables
+    $url = 'https://gcm-http.googleapis.com/gcm/send';
+
+    $headers = array(
+        'Authorization: key=' . $apiKey,
+        'Content-Type: application/json'
+    );
+    // Open connection
+    $ch = curl_init();
+
+    // Set the url, number of POST vars, POST data
+    curl_setopt($ch, CURLOPT_URL, $url);
+
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    // Disabling SSL Certificate support temporarly
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($fields));
+
+    $response = array();
+
+    // Execute post
+    $result = curl_exec($ch);
+    if ($result === FALSE) {
+        $response['error'] = TRUE;
+        $response['message'] = 'Unable to send test push notification';
+        echoRespnse(200, $response);
+        exit;
+    }
+
+    // Close connection
+    curl_close($ch);
+
+    $response['error'] = FALSE;
+    $response['message'] = 'Test push message sent successfully!';
 
     echoRespnse(200, $response);
 });
@@ -259,7 +312,7 @@ $app->post('/users/send_to_all', function() use ($app) {
 
     // get the user using userid
     $user = $db->getUser($user_id);
-    
+
     // creating tmp message, skipping database insertion
     $msg = array();
     $msg['message'] = $message;
@@ -270,7 +323,7 @@ $app->post('/users/send_to_all', function() use ($app) {
     $data = array();
     $data['user'] = $user;
     $data['message'] = $msg;
-    $data['image'] = 'http://www.androidhive.info/wp-content/uploads/2016/01/Air-1.png';
+    $data['image'] = 'http://api.androidhive.info/gcm/panda.jpg';
 
     $push->setTitle("Google Cloud Messaging");
     $push->setIsBackground(FALSE);
